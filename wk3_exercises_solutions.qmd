@@ -1,0 +1,124 @@
+---
+title: "Week 3 Exercises"
+format: html
+editor: visual
+---
+
+## Part 1: Tidying data warm-up
+
+```{r, message=F, warning=F}
+library(tidyverse)
+billboard_sm = select(billboard, artist, track, date.entered, wk1, wk2, wk3, wk4)
+View(billboard_sm)
+```
+
+Consider the `billboard_sm` dataframe: Each observation is a song track, and each observation has its own row. The variables "artist", "track", and "date.entered" all seem like very reasonable variables that are columns. However, "wk1", "wk2", "wk3", and "wk4" seem to be values of a variable "week".
+
+Using `pivot_longer`, take "wk1", "wk2", "wk3", and "wk4" columns to be values of the column "week" and have "billboard_ranking" to be the column name of the resulting values. In the process, you will need to specify the following arguments `pivot_longer()`: `data`, `cols`, `names_to`, and `values_to`.
+
+```{r}
+billboard_longer = pivot_longer(billboard_sm, c("wk1", "wk2", "wk3", "wk4"), names_to = "week", values_to = "billboard_ranking")
+```
+
+We can visualize this:
+
+```{r}
+ggplot(billboard_longer) + aes(x = week, y = billboard_rank, group = track) + geom_line(alpha = .25)
+```
+
+Can you undo the process via `pivot_wider()`? You will need to state the function arguments `data`, `names_from`, and `values_from`. The resulting dataframe should look identical as `billboard_sm`.
+
+```{r}
+pivot_wider(billboard_longer, names_from= "week",  values_from = "billboard_ranking")
+```
+
+## Part 2: Tidying data in State Cancer Profiles
+
+We continue our data analysis of State Cancer Profiles. We want to examine cancer incidence rates in state of Washington and make some comparisons between groups: specifically, we want to see whether there is a difference of melanoma (skin) cancer incidence between females and males for each county in Washington state.
+
+In our last exercise, we loaded in data for females melanoma cancer for each county in Washington state, and did some data cleaning. Let's show that process again, and repeat it for males:
+
+```{r}
+library(cancerprof)
+```
+
+```{r}
+#female
+female_melanoma_WA = incidence_cancer("WA", "county", "melanoma of the skin", "all races (includes hispanic)", "females", "all ages", "all stages", "latest 5 year average")
+
+female_melanoma_WA = select(female_melanoma_WA, County, `Age Adjusted Incidence Rate`)
+names(female_melanoma_WA) = c("County", "Age_adjusted_incidence_rate")
+
+female_melanoma_WA$Age_adjusted_incidence_rate[female_melanoma_WA$Age_adjusted_incidence_rate == "* "] = NA
+
+female_melanoma_WA$Age_adjusted_incidence_rate = as.numeric(female_melanoma_WA$Age_adjusted_incidence_rate)
+
+#male
+male_melanoma_WA = incidence_cancer("WA", "county", "melanoma of the skin", "all races (includes hispanic)", "males", "all ages", "all stages", "latest 5 year average")
+
+male_melanoma_WA = select(male_melanoma_WA, County, `Age Adjusted Incidence Rate`)
+names(male_melanoma_WA) = c("County", "Age_adjusted_incidence_rate")
+
+male_melanoma_WA$Age_adjusted_incidence_rate[male_melanoma_WA$Age_adjusted_incidence_rate == "* "] = NA
+
+male_melanoma_WA$Age_adjusted_incidence_rate = as.numeric(male_melanoma_WA$Age_adjusted_incidence_rate)
+```
+
+If we look at both dataframes, they seem to both be in a great Tidy state.
+
+👌 Each observation is a county, and each observation has its own row. Looks good.
+
+👌 We have two columns, County and Age_adjusted_incidence_rate, that seem to be reasonable variables.
+
+We can look at the incidence rate for each county via two separate bar plots:
+
+```{r}
+ggplot(female_melanoma_WA) + aes(x = County, y = Age_adjusted_incidence_rate) + geom_bar(stat = "identity") + ggtitle("Females") + theme(axis.text.x = element_text(angle = 90))
+
+ggplot(male_melanoma_WA) + aes(x = County, y = Age_adjusted_incidence_rate) + geom_bar(stat = "identity") + ggtitle("Males") + theme(axis.text.x = element_text(angle = 90))
+```
+
+Our goal is to compare the incidence rate between males and females at the county level. The following image is the plot we hope to generate:
+
+![](wk3_exercises_goal_plot.png)
+
+To create this plot, the columns we need are: `County`, `Age_adjusted_incidence_rate`, and `Sex`.
+
+It makes sense to bring both of these dataframes together in one dataframe. Let's join them with a common column `County`.
+
+```{r}
+male_vs_female = full_join(male_melanoma_WA, female_melanoma_WA, by = "County", suffix = c(".male", ".female"))
+```
+
+Let's look at this `male_vs_female` dataframe carefully. Is it Tidy?
+
+👌 Each observation is a county, and each observation has its own row. Looks good.
+
+😩 How about variables? Are they in their own columns? This gets subjective, because we could interpret the male and female cancer incidence rate ("Age_adjusted_incidence_rate.male", Age_adjusted_incidence_rate.female") as variables, *or* we could interpret them as *values* of a variable "Sex".
+
+But based on the variables we need for the final plot discussed above, "Age_adjusted_incidence_rate.male" "Age_adjusted_incidence_rate.female" should be values for the variable "Sex".
+
+Your turn: use `pivot_longer()` on `male_vs_female` dataframe, to take "Age_adjusted_incidence_rate.male" "Age_adjusted_incidence_rate.female" columns to be values of the column "Sex", and have `values_to` argument be "Age_adjusted_incidence_rate".
+
+```{r}
+melanoma_sex = pivot_longer(male_vs_female, c("Age_adjusted_incidence_rate.male", "Age_adjusted_incidence_rate.female"), names_to = "Sex", values_to = "Age_adjusted_incidence_rate")
+```
+
+Then, recode the values of the "Sex" column from "Age_adjusted_incidence_rate.female" to "female", and "Age_adjusted_incidence_rate.male" to "male".
+
+```{r}
+melanoma_sex$Sex[melanoma_sex$Sex == "Age_adjusted_incidence_rate.female"] = "female"
+melanoma_sex$Sex[melanoma_sex$Sex == "Age_adjusted_incidence_rate.male"] = "male"
+```
+
+There are some `NA`s in the column "Age_adjusted_incidence_rate". Can you filter these rows out?
+
+```{r}
+melanoma_sex = filter(melanoma_sex, !is.na(melanoma_sex$Age_adjusted_incidence_rate))
+```
+
+Let's make the plot! I'll get you started…
+
+```{r}
+ggplot(melanoma_sex, aes(x = County, y = Age_adjusted_incidence_rate, fill = Sex)) + geom_bar(position="dodge", stat="identity") + theme(axis.text.x = element_text(angle = 90)) + labs(title = "Melanoma", y = "Incidence Rate per 100k people")
+```
